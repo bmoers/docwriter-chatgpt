@@ -4,6 +4,50 @@ Did you ever have the problem with this large legacy code base and wished for a 
 
 Just use the docwriter to update your application JavaDoc with AI generated documentation. You can decide if the documenation should only span the class/interface declarations, or should cover evey public/private method.
 
+## Eat my own dogfood:
+Undocumented code
+```java
+@SpringBootApplication
+@Slf4j
+public class DocWriterApplication implements CommandLineRunner {
+
+    ...
+
+    @Override
+    public void run(String ... args) throws Exception {
+        logArgs();
+		addDocs();
+
+    }
+
+}
+
+```
+Gets documented as
+```java
+/**
+ *  The DocWriterApplication class is responsible for adding missing Javadoc to classes and interfaces in Java source code.
+ *  It utilizes the OpenAI GPT-3.5 Turbo model to generate the Javadoc based on the provided source code.
+ *  The Javadoc is added as class/interface-level comments and includes an author tag with the specified author name.
+ *
+ * @author DocWriterApplication
+ */
+@SpringBootApplication
+@Slf4j
+public class DocWriterApplication implements CommandLineRunner {
+
+    ...
+
+    @Override
+    public void run(String ... args) throws Exception {
+        logArgs();
+		addDocs();
+
+    }
+
+}
+```
+
 ## How to run this
 Since you are documenting a java application, a good understanding of running a java application is assumed. 
 
