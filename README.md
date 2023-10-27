@@ -52,15 +52,18 @@ public class DocWriterApplication implements CommandLineRunner {
 Since you are documenting a java application, a good understanding of running a java application is assumed. 
 
 Prerequisites:
-* java version 17 or newer
-* maven installed
+* pre unstalled java version 17 or newer
+* pre installed maven
+* openai Api Key as the API not for free. https://platform.openai.com/docs/quickstart/step-2-setup-your-api-key
 
 ```bash
-# see https://platform.openai.com/docs/quickstart/step-2-setup-your-api-key
 export OPENAI_API_KEY==your-openapi-key
 ./docWriter.sh --srcDir=./src/main/java 
-# or provide all parameters
-#./docWriter.sh --srcDir=./src/main/java --maxFileToChange=10 --classDoc=true --publicMethodDoc=false --privateMethodDoc=false --author=yourname
+```
+
+You can provide any combination of these parameters
+```bash
+./docWriter.sh --srcDir=./src/main/java --maxFileToChange=10 --classDoc=true --publicMethodDoc=false --privateMethodDoc=false --author=yourname
 
 ```
 
