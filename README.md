@@ -2,7 +2,7 @@
 
 Did you ever have the problem with this large legacy code base and wished for a good javadoc? Do you wish your fellow coders would have written a reasonable javadoc of their Java java code?
 
-Just use the docwriter to update your application JavaDoc with AI generated documentation. You can decide if the documenation should only span the class/interface declarations, or should cover evey public/private method.
+Just use the docwriter to update your application JavaDoc with AI generated documentation. 
 
 ## Eat my own dogfood:
 Undocumented code
@@ -54,14 +54,14 @@ Since you are documenting a java application, a good understanding of running a 
 Prerequisites:
 * pre unstalled java version 17 or newer
 * pre installed maven
-* openai Api Key as the API not for free. https://platform.openai.com/docs/quickstart/step-2-setup-your-api-key
+* openai Api Key, as the usage of API not for free. You may get welcome credits thou to document your codebase: https://platform.openai.com/docs/quickstart/step-2-setup-your-api-key
 
 ```bash
 export OPENAI_API_KEY==your-openapi-key
 ./docWriter.sh --srcDir=./src/main/java 
 ```
 
-You can provide any combination of these parameters
+You can provide any combination of the following parameters
 ```bash
 ./docWriter.sh --srcDir=./src/main/java --maxFileToChange=10 --classDoc=true --publicMethodDoc=false --privateMethodDoc=false --author=yourname
 
