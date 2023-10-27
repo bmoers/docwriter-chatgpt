@@ -69,4 +69,12 @@ You can provide any combination of these parameters
 
 This will traverse all the java files in the passed directory, and generate JavaDoc. Dont forget to proof read these docs before propagating/comitting.
 
+## Privacy consideration
+Your code will be partially sent to OpenAI as part of the completion requests. Please note however, that OpenAI policy 
+* excludes such data from training
+* keeps the data ownership with you for both input (code) and output (docs)
+
+https://openai.com/enterprise-privacy
+
+
 
