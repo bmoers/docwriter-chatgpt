@@ -62,22 +62,22 @@ public class DocWriterApplication implements CommandLineRunner {
     }
 
     @Override
-    public void run(String ... args) throws Exception {
+    public void run(String... args) throws Exception {
         logArgs();
-		addDocs();
+        addDocs();
 
     }
 
-	private void logArgs() {
-		log.info("srcDir: " + srcDir);
+    private void logArgs() {
+        log.info("srcDir: " + srcDir);
         log.info("maxFileToChange: " + maxFileToChange);
         log.debug("openApiToken: " + openaiApiKey);
         log.info("classDoc: " + classDoc);
         log.info("publicMethodDoc: " + publicMethodDoc);
         log.info("privateMethodDoc: " + privateMethodDoc);
-	}
+    }
 
-	private void addDocs() throws Exception {
+    private void addDocs() throws Exception {
 
         // Create a SourceRoot
         SourceRoot sourceRoot = new SourceRoot(Paths.get(srcDir));
@@ -96,7 +96,7 @@ public class DocWriterApplication implements CommandLineRunner {
                     if (!classOrInterface.getComment().isPresent()) {
                         addMissingJavadoc(cu, classOrInterface);
                         changeCounter--;
-                        break; //only add to the top class in the file
+                        break; // only add to the top class in the file
                     }
                 }
             }
@@ -106,7 +106,7 @@ public class DocWriterApplication implements CommandLineRunner {
         }
     }
 
-    private  void addMissingJavadoc(CompilationUnit cu, ClassOrInterfaceDeclaration classOrInterface) throws Exception {
+    private void addMissingJavadoc(CompilationUnit cu, ClassOrInterfaceDeclaration classOrInterface) throws Exception {
 
         log.info("Adding missing JavaDoc for class/interface: " + classOrInterface.getNameAsString());
 
@@ -119,7 +119,6 @@ public class DocWriterApplication implements CommandLineRunner {
 
         String contentDescription = generateJavaDoc(sourceCode);
 
-
         Javadoc javadoc = new Javadoc(JavadocDescription.parseText(contentDescription));
         javadoc.addBlockTag(new JavadocBlockTag(JavadocBlockTag.Type.AUTHOR, author));
         JavadocComment javadocComment = new JavadocComment(javadoc.toText());
@@ -129,7 +128,7 @@ public class DocWriterApplication implements CommandLineRunner {
 
     }
 
-    private  void save(CompilationUnit cu) throws IOException {
+    private void save(CompilationUnit cu) throws IOException {
         Optional<Storage> storage = cu.getStorage();
 
         if (storage.isPresent()) {
@@ -141,7 +140,7 @@ public class DocWriterApplication implements CommandLineRunner {
 
     }
 
-    private  String generateJavaDoc(String classSourceCode) throws Exception {
+    private String generateJavaDoc(String classSourceCode) throws Exception {
         log.trace("generating javadoc for \n" + classSourceCode);
 
         // Prepare the request
