@@ -63,7 +63,7 @@ export OPENAI_API_KEY==your-openapi-key
 
 You can provide any combination of the following parameters
 ```bash
-./docWriter.sh --srcDir=./src/test/java --maxFileToChange=1 --classDoc=true --publicMethodDoc=false --nonPublicMethodDoc=false --author=yourname
+./docWriter.sh --srcDir=./src/test/java --maxFileToChange=1 --classDoc=true --publicMethodDoc=true --nonPublicMethodDoc=true --author=yourname
 
 ```
 
