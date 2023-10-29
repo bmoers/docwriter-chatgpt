@@ -58,12 +58,12 @@ Prerequisites:
 
 ```bash
 export OPENAI_API_KEY==your-openapi-key
-./docWriter.sh --srcDir=./src/main/java 
+./docWriter.sh --srcDir=./src/test/java 
 ```
 
 You can provide any combination of the following parameters
 ```bash
-./docWriter.sh --srcDir=./src/main/java --maxFileToChange=10 --classDoc=true --publicMethodDoc=false --privateMethodDoc=false --author=yourname
+./docWriter.sh --srcDir=./src/test/java --maxFileToChange=1 --classDoc=true --publicMethodDoc=false --nonPublicMethodDoc=false --author=yourname
 
 ```
 
