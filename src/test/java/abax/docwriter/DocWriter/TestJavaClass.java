@@ -66,11 +66,17 @@ public class TestJavaClass implements CommandLineRunner {
 
     private void logArgs() {
         log.info("srcDir: " + srcDir);
+
         log.info("maxFileToChange: " + maxFileToChange);
+
         log.debug("openApiToken: " + openaiApiKey);
+
         log.info("classDoc: " + classDoc);
+
         log.info("publicMethodDoc: " + publicMethodDoc);
+
         log.info("nonPublicMethodDoc: " + nonPublicMethodDoc);
+
     }
 
     private void addDocs() throws Exception {
@@ -86,7 +92,8 @@ public class TestJavaClass implements CommandLineRunner {
                 log.info("Processing " + cu.getStorage().get().getPath());
                 boolean fileChanged = false;
                 // process only the top element of the file
-                ClassOrInterfaceDeclaration topClassOrInterface = cu.findFirst(ClassOrInterfaceDeclaration.class).get();
+                ClassOrInterfaceDeclaration topClassOrInterface = cu
+                        .findFirst(ClassOrInterfaceDeclaration.class).get();
                 if (topClassOrInterface.getComment().isEmpty() && this.classDoc) {
                     addClassJavadoc(cu, topClassOrInterface);
                     fileChanged = true;
@@ -95,7 +102,8 @@ public class TestJavaClass implements CommandLineRunner {
                 if (this.publicMethodDoc || this.nonPublicMethodDoc) {
                     if (!topClassOrInterface.isInterface()) {
                         for (MethodDeclaration method : cu.findAll(MethodDeclaration.class)) {
-                            if (method.getComment().isEmpty() && ((method.isPublic() && this.publicMethodDoc) || (!method.isPublic() && this.nonPublicMethodDoc))) {
+                            if (method.getComment().isEmpty() && ((method.isPublic() && this.publicMethodDoc)
+                                    || (!method.isPublic() && this.nonPublicMethodDoc))) {
                                 addMethodJavadoc(cu, method);
                                 fileChanged = true;
                             }
@@ -148,6 +156,7 @@ public class TestJavaClass implements CommandLineRunner {
 
     private String generateJavaDoc(String classSourceCode) throws Exception {
         log.trace("generating javadoc for \n" + classSourceCode);
+
         // Prepare the request
         HttpClient client = HttpClient.newHttpClient();
         // Prepare the body
@@ -156,15 +165,18 @@ public class TestJavaClass implements CommandLineRunner {
         JSONArray messagesArray = new JSONArray();
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
-        systemMessage.put("content", "You will be provided with java source code. Your task is to generate javadoc for this code. The javadoc must be generated for the class or interface level, and nowhere else. \nDo not generate javadoc for methods.\nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the class starting with the \n/**\nand ending with the\n/*\n");
+        systemMessage.put("content",
+                "You will be provided with java source code. Your task is to generate javadoc for this code. The javadoc must be generated for the class or interface level, and nowhere else. \nDo not generate javadoc for methods.\nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the class starting with the \n/**\nand ending with the\n/*\n");
         messagesArray.put(systemMessage);
         JSONObject sampleUserMessage = new JSONObject();
         sampleUserMessage.put("role", "user");
-        sampleUserMessage.put("content", "public class JavaDocAnalyzer {\n\n    private void main(String[] args) throws IOException {\n        // Define the path to the source code\n        String pathToSrc = \"src/main/java\";\n\n        // Create a SourceRoot\n        SourceRoot sourceRoot = new SourceRoot(Paths.get(pathToSrc));\n\n        // Parse all the Java files in the source root\n        List<ParseResult<CompilationUnit>> parseResults = sourceRoot.tryToParse(\"\");\n\n        // Analyze each parsed result\n        for (ParseResult<CompilationUnit> parseResult : parseResults) {\n            if (parseResult.isSuccessful()) {\n                CompilationUnit cu = parseResult.getResult().get();\n                checkForMissingJavaDoc(cu);\n            }\n        }\n    }\n\n    private static void checkForMissingJavaDoc(CompilationUnit cu) throws Exception {\n        for (ClassOrInterfaceDeclaration classOrInterface : cu.findAll(ClassOrInterfaceDeclaration.class)) {\n            // Check if the class/interface has JavaDoc\n            if (!classOrInterface.getComment().isPresent()) {\n                log.info(\"Adding missing JavaDoc for class/interface: \" + classOrInterface.getNameAsString());\n                \n                String sourceCode = \"\";\n                for (Node child : cu.getChildNodes()) {\n                    if (!(child instanceof com.github.javaparser.ast.ImportDeclaration)) {\n                        sourceCode += child.toString();\n                    }\n                }\n                \n                // Get the source code of the class without imports and pass it to generateJavaDoc\n                // String classSourceCode = cu.toString();\n                generateJavaDoc(sourceCode);\n            }\n        }\n    }\n    \n    private static void generateJavaDoc(String classSourceCode) throws Exception {\n        log.info(\"generating javadoc for \\n\" + classSourceCode);\n\n        // Prepare the request\n        HttpClient client = HttpClient.newHttpClient();\n    \n        // Prepare the body\n        JSONObject messageBody = new JSONObject();\n        messageBody.put(\"model\", \"gpt-3.5-turbo\");\n        messageBody.put(\"messages\", List.of(\n            Map.of(\"role\", \"system\", \"content\", \"You are a javadoc documentation writer reading the source code, and outputting javadoc only.\"),\n            Map.of(\"role\", \"user\", \"content\", classSourceCode)\n        ));\n    \n        // Create HTTP request\n        HttpRequest request = HttpRequest.newBuilder()\n                .uri(new URI(\"https://api.openai.com/v1/chat/completions\"))\n                .header(\"Content-Type\", \"application/json\")\n                .header(\"Authorization\", \"Bearer \" + \"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\")\n                .POST(HttpRequest.BodyPublishers.ofString(messageBody.toString(), StandardCharsets.UTF_8))\n                .build();\n    \n        // Send the request\n        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());\n    \n        // Process the response\n        JSONObject jsonResponse = new JSONObject(response.body());\n        String javaDoc = jsonResponse.getJSONArray(\"choices\").getJSONObject(0).getString(\"message\").getJSONObject(\"content\");\n        log.info(javaDoc); // or add it to the class or take other actions\n    \n        System.exit(0);\n    }\n    \n}");
+        sampleUserMessage.put("content",
+                "public class JavaDocAnalyzer {\n\n    private void main(String[] args) throws IOException {\n        // Define the path to the source code\n        String pathToSrc = \"src/main/java\";\n\n        // Create a SourceRoot\n        SourceRoot sourceRoot = new SourceRoot(Paths.get(pathToSrc));\n\n        // Parse all the Java files in the source root\n        List<ParseResult<CompilationUnit>> parseResults = sourceRoot.tryToParse(\"\");\n\n        // Analyze each parsed result\n        for (ParseResult<CompilationUnit> parseResult : parseResults) {\n            if (parseResult.isSuccessful()) {\n                CompilationUnit cu = parseResult.getResult().get();\n                checkForMissingJavaDoc(cu);\n            }\n        }\n    }\n\n    private static void checkForMissingJavaDoc(CompilationUnit cu) throws Exception {\n        for (ClassOrInterfaceDeclaration classOrInterface : cu.findAll(ClassOrInterfaceDeclaration.class)) {\n            // Check if the class/interface has JavaDoc\n            if (!classOrInterface.getComment().isPresent()) {\n                log.info(\"Adding missing JavaDoc for class/interface: \" + classOrInterface.getNameAsString());\n                \n                String sourceCode = \"\";\n                for (Node child : cu.getChildNodes()) {\n                    if (!(child instanceof com.github.javaparser.ast.ImportDeclaration)) {\n                        sourceCode += child.toString();\n                    }\n                }\n                \n                // Get the source code of the class without imports and pass it to generateJavaDoc\n                // String classSourceCode = cu.toString();\n                generateJavaDoc(sourceCode);\n            }\n        }\n    }\n    \n    private static void generateJavaDoc(String classSourceCode) throws Exception {\n        log.info(\"generating javadoc for \\n\" + classSourceCode);\n\n        // Prepare the request\n        HttpClient client = HttpClient.newHttpClient();\n    \n        // Prepare the body\n        JSONObject messageBody = new JSONObject();\n        messageBody.put(\"model\", \"gpt-3.5-turbo\");\n        messageBody.put(\"messages\", List.of(\n            Map.of(\"role\", \"system\", \"content\", \"You are a javadoc documentation writer reading the source code, and outputting javadoc only.\"),\n            Map.of(\"role\", \"user\", \"content\", classSourceCode)\n        ));\n    \n        // Create HTTP request\n        HttpRequest request = HttpRequest.newBuilder()\n                .uri(new URI(\"https://api.openai.com/v1/chat/completions\"))\n                .header(\"Content-Type\", \"application/json\")\n                .header(\"Authorization\", \"Bearer \" + \"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\")\n                .POST(HttpRequest.BodyPublishers.ofString(messageBody.toString(), StandardCharsets.UTF_8))\n                .build();\n    \n        // Send the request\n        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());\n    \n        // Process the response\n        JSONObject jsonResponse = new JSONObject(response.body());\n        String javaDoc = jsonResponse.getJSONArray(\"choices\").getJSONObject(0).getString(\"message\").getJSONObject(\"content\");\n        log.info(javaDoc); // or add it to the class or take other actions\n    \n        System.exit(0);\n    }\n    \n}");
         messagesArray.put(sampleUserMessage);
         JSONObject sampleAssistantMessage = new JSONObject();
         sampleAssistantMessage.put("role", "assistant");
-        sampleAssistantMessage.put("content", "/**\n * The JavaDocAnalyzer class is responsible for analyzing Java source code and generating Javadoc for classes\n * and interfaces that are missing it.\n */");
+        sampleAssistantMessage.put("content",
+                "/**\n * The JavaDocAnalyzer class is responsible for analyzing Java source code and generating Javadoc for classes\n * and interfaces that are missing it.\n */");
         messagesArray.put(sampleAssistantMessage);
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
@@ -178,12 +190,15 @@ public class TestJavaClass implements CommandLineRunner {
         messageBody.put("presence_penalty", 0);
         log.info("Sending ChatGpt request ");
         // Create HTTP request
-        HttpRequest request = HttpRequest.newBuilder().uri(new URI("https://api.openai.com/v1/chat/completions")).header("Content-Type", "application/json").header("Authorization", "Bearer " + openaiApiKey).POST(HttpRequest.BodyPublishers.ofString(messageBody.toString(), StandardCharsets.UTF_8)).build();
+        HttpRequest request = HttpRequest.newBuilder().uri(new URI("https://api.openai.com/v1/chat/completions"))
+                .header("Content-Type", "application/json").header("Authorization", "Bearer " + openaiApiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(messageBody.toString(), StandardCharsets.UTF_8)).build();
         // Send the request
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         // Process the response
         JSONObject jsonResponse = new JSONObject(response.body());
-        String content = jsonResponse.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
+        String content = jsonResponse.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
+                .getString("content");
         log.info("ChatGpt response received: ");
         String classJavaDoc = extractJavadoc(content);
         log.info(classJavaDoc);
