@@ -191,25 +191,19 @@ public class DocWriterApplication implements CommandLineRunner {
 
     }
 
-    private String generateJavaDoc(String classSourceCode, JSONArray messagesArray) throws Exception {
+    private String generateJavaDoc(String classSourceCode, JSONObject messageBody) throws Exception {
         log.trace("generating javadoc for \n" + classSourceCode);
 
-        // Prepare the request
-        HttpClient client = HttpClient.newHttpClient();
-
-        // Prepare the body
-        JSONObject messageBody = new JSONObject();
-        messageBody.put("model", "gpt-3.5-turbo");
 
 
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
         userMessage.put("content", classSourceCode);
-        messagesArray.put(userMessage);
+        messageBody.getJSONArray("messages").put(userMessage);
 
-        messageBody.put("messages", messagesArray);
+        messageBody.put("model", "gpt-3.5-turbo");
         messageBody.put("temperature", 1);
-        messageBody.put("max_tokens", 256);
+        messageBody.put("max_tokens", 150);
         messageBody.put("top_p", 1);
         messageBody.put("frequency_penalty", 0);
         messageBody.put("presence_penalty", 0);
@@ -225,6 +219,7 @@ public class DocWriterApplication implements CommandLineRunner {
                 .build();
 
         // Send the request
+        HttpClient client = HttpClient.newHttpClient();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         log.debug("Received response {}", response.body());
 
@@ -244,7 +239,7 @@ public class DocWriterApplication implements CommandLineRunner {
 
     }
 
-    private JSONArray setupMethodDocGeneration() {
+    private JSONObject setupMethodDocGeneration() {
         JSONArray messagesArray = new JSONArray();
 
         JSONObject systemMessage = new JSONObject();
@@ -253,16 +248,20 @@ public class DocWriterApplication implements CommandLineRunner {
                 "You will be provided with java source code. Your task is to generate javadoc for this java method. \nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the method starting with the \n/**\nand ending with the\n/*\n");
         messagesArray.put(systemMessage);
 
-        return messagesArray;
-    }
+        JSONObject messageBody = new JSONObject();
+        messageBody.put("messages", messagesArray);
 
-    private JSONArray setupClassDocGeneration() {
+        return messageBody;    }
+
+    private JSONObject setupClassDocGeneration() {
         JSONArray messagesArray = new JSONArray();
 
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
         systemMessage.put("content",
-                "You will be provided with java source code. Your task is to generate javadoc for this code. The javadoc must be generated for the class or interface level, and nowhere else. \nDo not generate javadoc for methods.\nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the class starting with the \n/**\nand ending with the\n/*\n");
+                "You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. The javadoc must be generated for the class or interface level, and not on the method level. \\n" + //
+                        "Do not generate code comments.\\n" + //
+                        "Do not print out the source code, that has been provided as input.");
         messagesArray.put(systemMessage);
 
         JSONObject sampleUserMessage = new JSONObject();
@@ -276,7 +275,13 @@ public class DocWriterApplication implements CommandLineRunner {
         sampleAssistantMessage.put("content",
                 "/**\n * The JavaDocAnalyzer class is responsible for analyzing Java source code and generating Javadoc for classes\n * and interfaces that are missing it.\n */");
         messagesArray.put(sampleAssistantMessage);
-        return messagesArray;
+
+        JSONObject messageBody = new JSONObject();
+        messageBody.put("messages", messagesArray);
+
+        messageBody.put("stop", new JSONArray(List.of("public class", "public interface"))); // stop it passed code start to be outputted
+
+        return messageBody;
     }
 
     private String extractJavadoc(String input) {
