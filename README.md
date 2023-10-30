@@ -67,7 +67,7 @@ You can provide any combination of the following parameters
 
 ```
 
-This will traverse all the java files in the passed directory, and generate JavaDoc. Dont forget to proof read these docs before propagating/comitting.
+This will traverse all the java files in the passed directory, and generate JavaDoc. Dont forget to proof read these docs and run your project formatter before propagating/comitting.
 
 ## Privacy consideration
 Your code will be partially sent to OpenAI as part of the completion requests. Please note however, that OpenAI policy 

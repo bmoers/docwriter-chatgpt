@@ -34,6 +34,24 @@ import com.github.javaparser.utils.SourceRoot;
 
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * The TestJavaClass class is a Spring Boot application that implements the CommandLineRunner interface. 
+ * It is responsible for analyzing Java source code and adding missing Javadoc for classes and methods based on specified configurations.
+ * 
+ * This application accepts the following command line arguments:
+ * - srcDir: The directory path to the source code. Default value is an empty string.
+ * - author: The author name to be included in the Javadoc. Default value is "DocWriterApplication".
+ * - maxFileToChange: The maximum number of files to apply the Javadoc changes. Default value is 1.
+ * - classDoc: Flag to indicate whether to add Javadoc for classes/interfaces. Default value is true.
+ * - publicMethodDoc: Flag to indicate whether to add Javadoc for public methods. Default value is false.
+ * - nonPublicMethodDoc: Flag to indicate whether to add Javadoc for non-public methods. Default value is false.
+ * 
+ * The TestJavaClass application makes use of the OpenAI GPT-3.5 Turbo model to generate Javadoc. 
+ * The access token for the API should be set as the OPENAI_API_KEY environment variable.
+ * 
+ * To run the application, simply execute the main method.
+ * @author DocWriterApplication
+*/
 @SpringBootApplication
 @Slf4j
 public class DocWriterApplication implements CommandLineRunner {
@@ -92,6 +110,9 @@ public class DocWriterApplication implements CommandLineRunner {
         for (ParseResult<CompilationUnit> parseResult : parseResults) {
             if (parseResult.isSuccessful()) {
                 CompilationUnit cu = parseResult.getResult().get();
+                // this will try to preserve the format
+                LexicalPreservingPrinter.setup(cu);
+
                 log.info("Processing " + cu.getStorage().get().getPath());
                 boolean fileChanged = false;
 
@@ -178,14 +199,9 @@ public class DocWriterApplication implements CommandLineRunner {
             log.info("Writing docs to " + pathToFile);
 
 
-            // LexicalPreservingPrinter.setup(cu);
         
-            // // Print using the LexicalPreservingPrinter which will maintain the original formatting where possible
-            // String code = LexicalPreservingPrinter.print(cu);
-
-        
-            // Files.write(pathToFile, code.getBytes(StandardCharsets.UTF_8));
-            Files.write(pathToFile, cu.toString().getBytes(StandardCharsets.UTF_8));
+            String code = LexicalPreservingPrinter.print(cu);
+            Files.write(pathToFile, code.getBytes(StandardCharsets.UTF_8));
 
         }
 
@@ -203,7 +219,7 @@ public class DocWriterApplication implements CommandLineRunner {
 
         messageBody.put("model", "gpt-3.5-turbo");
         messageBody.put("temperature", 1);
-        messageBody.put("max_tokens", 150);
+        messageBody.put("max_tokens", 256);
         messageBody.put("top_p", 1);
         messageBody.put("frequency_penalty", 0);
         messageBody.put("presence_penalty", 0);
