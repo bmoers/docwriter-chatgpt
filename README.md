@@ -58,16 +58,16 @@ Prerequisites:
 
 ```bash
 export OPENAI_API_KEY==your-openapi-key
-./docWriter.sh --srcDir=./src/main/java 
+./docWriter.sh --srcDir=./src/test/java 
 ```
 
 You can provide any combination of the following parameters
 ```bash
-./docWriter.sh --srcDir=./src/main/java --maxFileToChange=10 --classDoc=true --publicMethodDoc=false --privateMethodDoc=false --author=yourname
+./docWriter.sh --srcDir=./src/test/java --maxFileToChange=1 --classDoc=true --publicMethodDoc=true --nonPublicMethodDoc=true --author=yourname
 
 ```
 
-This will traverse all the java files in the passed directory, and generate JavaDoc. Dont forget to proof read these docs before propagating/comitting.
+This will traverse all the java files in the passed directory, and generate JavaDoc. Dont forget to proof read these docs and run your project formatter before propagating/comitting.
 
 ## Privacy consideration
 Your code will be partially sent to OpenAI as part of the completion requests. Please note however, that OpenAI policy 

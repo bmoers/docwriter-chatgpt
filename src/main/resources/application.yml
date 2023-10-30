@@ -1,1 +1,4 @@
 
+logging:
+  level:
+    abax.docwriter: DEBUG
