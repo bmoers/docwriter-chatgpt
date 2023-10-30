@@ -29,6 +29,7 @@ import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.javadoc.Javadoc;
 import com.github.javaparser.javadoc.JavadocBlockTag;
 import com.github.javaparser.javadoc.description.JavadocDescription;
+import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.github.javaparser.utils.SourceRoot;
 
 import lombok.extern.slf4j.Slf4j;
@@ -176,7 +177,16 @@ public class DocWriterApplication implements CommandLineRunner {
             Path pathToFile = storage.get().getPath();
             log.info("Writing docs to " + pathToFile);
 
+
+            // LexicalPreservingPrinter.setup(cu);
+        
+            // // Print using the LexicalPreservingPrinter which will maintain the original formatting where possible
+            // String code = LexicalPreservingPrinter.print(cu);
+
+        
+            // Files.write(pathToFile, code.getBytes(StandardCharsets.UTF_8));
             Files.write(pathToFile, cu.toString().getBytes(StandardCharsets.UTF_8));
+
         }
 
     }
@@ -216,9 +226,14 @@ public class DocWriterApplication implements CommandLineRunner {
 
         // Send the request
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        log.debug("Received response {}", response.body());
 
         // Process the response
         JSONObject jsonResponse = new JSONObject(response.body());
+        if (jsonResponse.has("error")){
+            throw new RuntimeException(jsonResponse.getJSONObject("error").toString());
+
+        }
         String content = jsonResponse.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
                 .getString("content");
         log.info("ChatGpt response received: ");
@@ -269,9 +284,7 @@ public class DocWriterApplication implements CommandLineRunner {
         int endIndex = input.indexOf("*/");
 
         if (startIndex != -1 && endIndex != -1) {
-            // Adjust endIndex to include the "*/"
-            endIndex += 2;
-            return input.substring(startIndex, endIndex);
+            return input.substring(startIndex + 3, endIndex);
         } else {
             return null;
         }
