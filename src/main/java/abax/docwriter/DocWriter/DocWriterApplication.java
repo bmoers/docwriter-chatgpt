@@ -5,10 +5,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,23 +37,34 @@ import com.github.javaparser.utils.SourceRoot;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * The TestJavaClass class is a Spring Boot application that implements the CommandLineRunner interface. 
- * It is responsible for analyzing Java source code and adding missing Javadoc for classes and methods based on specified configurations.
+ * The TestJavaClass class is a Spring Boot application that implements the
+ * CommandLineRunner interface.
+ * It is responsible for analyzing Java source code and adding missing Javadoc
+ * for classes and methods based on specified configurations.
  * 
  * This application accepts the following command line arguments:
- * - srcDir: The directory path to the source code. Default value is an empty string.
- * - author: The author name to be included in the Javadoc. Default value is "DocWriterApplication".
- * - maxFileToChange: The maximum number of files to apply the Javadoc changes. Default value is 1.
- * - classDoc: Flag to indicate whether to add Javadoc for classes/interfaces. Default value is true.
- * - publicMethodDoc: Flag to indicate whether to add Javadoc for public methods. Default value is false.
- * - nonPublicMethodDoc: Flag to indicate whether to add Javadoc for non-public methods. Default value is false.
+ * - srcDir: The directory path to the source code. Default value is an empty
+ * string.
+ * - author: The author name to be included in the Javadoc. Default value is
+ * "DocWriterApplication".
+ * - maxFileToChange: The maximum number of files to apply the Javadoc changes.
+ * Default value is 1.
+ * - classDoc: Flag to indicate whether to add Javadoc for classes/interfaces.
+ * Default value is true.
+ * - publicMethodDoc: Flag to indicate whether to add Javadoc for public
+ * methods. Default value is false.
+ * - nonPublicMethodDoc: Flag to indicate whether to add Javadoc for non-public
+ * methods. Default value is false.
  * 
- * The TestJavaClass application makes use of the OpenAI GPT-3.5 Turbo model to generate Javadoc. 
- * The access token for the API should be set as the OPENAI_API_KEY environment variable.
+ * The TestJavaClass application makes use of the OpenAI GPT-3.5 Turbo model to
+ * generate Javadoc.
+ * The access token for the API should be set as the OPENAI_API_KEY environment
+ * variable.
  * 
  * To run the application, simply execute the main method.
+ * 
  * @author DocWriterApplication
-*/
+ */
 @SpringBootApplication
 @Slf4j
 public class DocWriterApplication implements CommandLineRunner {
@@ -105,6 +118,7 @@ public class DocWriterApplication implements CommandLineRunner {
         List<ParseResult<CompilationUnit>> parseResults = sourceRoot.tryToParse("");
 
         int changeCounter = maxFileToChange;
+        int toleratedErrors = 2;
 
         // Analyze each parsed result
         for (ParseResult<CompilationUnit> parseResult : parseResults) {
@@ -112,37 +126,53 @@ public class DocWriterApplication implements CommandLineRunner {
                 CompilationUnit cu = parseResult.getResult().get();
                 // this will try to preserve the format
                 LexicalPreservingPrinter.setup(cu);
-
-                log.info("Processing " + cu.getStorage().get().getPath());
                 boolean fileChanged = false;
 
-                // process only the top element of the file
-                ClassOrInterfaceDeclaration topClassOrInterface = cu
-                        .findFirst(ClassOrInterfaceDeclaration.class).get();
-                if (topClassOrInterface.getComment().isEmpty() && this.classDoc) {
-                    addClassJavadoc(cu, topClassOrInterface);
-                    fileChanged = true;
-                }
+                log.info("Processing {}", cu.getStorage().get().getPath());
+                try {
 
-                // Process public methods if the top-level element is a class
-                if (this.publicMethodDoc || this.nonPublicMethodDoc) {
-                    if (!topClassOrInterface.isInterface()) {
-                        for (MethodDeclaration method : cu.findAll(MethodDeclaration.class)) {
-                            if (method.getComment().isEmpty()
-                                &&
-                             ((method.isPublic() && this.publicMethodDoc)
-                             ||
-                             (!method.isPublic() && this.nonPublicMethodDoc))) {
-                                addMethodJavadoc(cu, method);
-                                fileChanged = true;
+                    // process only the top element of the file
+                    Optional<ClassOrInterfaceDeclaration> topClassOrInterfaceOptional = cu
+                            .findFirst(ClassOrInterfaceDeclaration.class);
+                    if (topClassOrInterfaceOptional.isEmpty()) {
+                        log.info("No class or interface is present in file {}", cu.getStorage().get().getPath());
+                        continue;
+                    }
+
+                    ClassOrInterfaceDeclaration topClassOrInterface = topClassOrInterfaceOptional.get();
+                    if (topClassOrInterface.getComment().isEmpty() && this.classDoc) {
+                        addClassJavadoc(cu, topClassOrInterface);
+                        fileChanged = true;
+                    }
+
+                    // Process public methods if the top-level element is a class
+                    if (this.publicMethodDoc || this.nonPublicMethodDoc) {
+                        if (!topClassOrInterface.isInterface()) {
+                            for (MethodDeclaration method : cu.findAll(MethodDeclaration.class)) {
+                                if (method.getComment().isEmpty()
+                                        &&
+                                        ((method.isPublic() && this.publicMethodDoc)
+                                                ||
+                                                (!method.isPublic() && this.nonPublicMethodDoc))) {
+                                    addMethodJavadoc(cu, method, topClassOrInterface.getNameAsString());
+                                    fileChanged = true;
+                                }
                             }
                         }
                     }
+
+                } catch (Exception e) {
+                    log.error("Failed to process {}", cu.getStorage().get().getPath());
+                    log.error("Exception", e);
+                    toleratedErrors--;
+                    if (toleratedErrors <= 0) {
+                        throw e;
+                    }
                 }
-                if (fileChanged){
+
+                if (fileChanged) {
                     changeCounter--;
                     save(cu);
-
                 }
 
             }
@@ -152,12 +182,12 @@ public class DocWriterApplication implements CommandLineRunner {
         }
     }
 
-    private void addMethodJavadoc(CompilationUnit cu, MethodDeclaration method) throws Exception {
-        log.info("Adding missing JavaDoc for method: " + method.getNameAsString());
+    private void addMethodJavadoc(CompilationUnit cu, MethodDeclaration method, String className) throws Exception {
+        log.info("Adding missing JavaDoc for method: {}.{}", className, method.getNameAsString());
 
         String sourceCode = method.toString();
         String generatedJavadoc = generateJavaDoc(sourceCode, setupMethodDocGeneration());
-        if (generatedJavadoc == null){
+        if (generatedJavadoc == null) {
             log.error("Failed to generate javadoc for {}", method.getNameAsString());
             return;
         }
@@ -169,7 +199,7 @@ public class DocWriterApplication implements CommandLineRunner {
 
     private void addClassJavadoc(CompilationUnit cu, ClassOrInterfaceDeclaration classOrInterface) throws Exception {
 
-        log.info("Adding missing JavaDoc for class/interface: " + classOrInterface.getNameAsString());
+        log.info("Adding missing JavaDoc for class/interface: {}",  classOrInterface.getNameAsString());
 
         String sourceCode = "";
         for (Node child : cu.getChildNodes()) {
@@ -179,7 +209,7 @@ public class DocWriterApplication implements CommandLineRunner {
         }
 
         String generatedJavadoc = generateJavaDoc(sourceCode, setupClassDocGeneration());
-        if (generatedJavadoc == null){
+        if (generatedJavadoc == null) {
             log.error("Failed to generate javadoc for {}", classOrInterface.getNameAsString());
             return;
         }
@@ -198,8 +228,6 @@ public class DocWriterApplication implements CommandLineRunner {
             Path pathToFile = storage.get().getPath();
             log.info("Writing docs to " + pathToFile);
 
-
-        
             String code = LexicalPreservingPrinter.print(cu);
             Files.write(pathToFile, code.getBytes(StandardCharsets.UTF_8));
 
@@ -208,9 +236,7 @@ public class DocWriterApplication implements CommandLineRunner {
     }
 
     private String generateJavaDoc(String classSourceCode, JSONObject messageBody) throws Exception {
-        log.trace("generating javadoc for \n" + classSourceCode);
-
-
+        log.trace("generating javadoc for \n {}",  classSourceCode);
 
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
@@ -231,17 +257,20 @@ public class DocWriterApplication implements CommandLineRunner {
                 .uri(new URI("https://api.openai.com/v1/chat/completions"))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + openaiApiKey)
+                .timeout(Duration.ofSeconds(30))
                 .POST(HttpRequest.BodyPublishers.ofString(messageBody.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        // Send the request
-        HttpClient client = HttpClient.newHttpClient();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        // get the conn, and handle the case when OpenAI API is not reachable
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        // HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = sendWithRetry(client, request, 2);
+
         log.debug("Received response {}", response.body());
 
         // Process the response
         JSONObject jsonResponse = new JSONObject(response.body());
-        if (jsonResponse.has("error")){
+        if (jsonResponse.has("error")) {
             throw new RuntimeException(jsonResponse.getJSONObject("error").toString());
 
         }
@@ -253,6 +282,26 @@ public class DocWriterApplication implements CommandLineRunner {
 
         return classJavaDoc;
 
+    }
+
+    /**
+     * OpenAI sometimes just hang. Give it a retry
+     */
+    private HttpResponse<String> sendWithRetry(HttpClient client, HttpRequest request, int maxAttempts)
+            throws Exception {
+        int attempt = 0;
+        while (true) {
+            try {
+                return client.send(request, HttpResponse.BodyHandlers.ofString());
+            } catch (HttpTimeoutException e) {
+                if (++attempt == maxAttempts)
+                    throw e; 
+                else {
+                    log.warn("Request timeouted. Will retry");
+                }
+            }
+            // Handle other exceptions if necessary
+        }
     }
 
     private JSONObject setupMethodDocGeneration() {
@@ -267,7 +316,8 @@ public class DocWriterApplication implements CommandLineRunner {
         JSONObject messageBody = new JSONObject();
         messageBody.put("messages", messagesArray);
 
-        return messageBody;    }
+        return messageBody;
+    }
 
     private JSONObject setupClassDocGeneration() {
         JSONArray messagesArray = new JSONArray();
@@ -275,7 +325,8 @@ public class DocWriterApplication implements CommandLineRunner {
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
         systemMessage.put("content",
-                "You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. The javadoc must be generated for the class or interface level, and not on the method level. \\n" + //
+                "You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. The javadoc must be generated for the class or interface level, and not on the method level. \\n"
+                        + //
                         "Do not generate code comments.\\n" + //
                         "Do not print out the source code, that has been provided as input.");
         messagesArray.put(systemMessage);
@@ -295,7 +346,8 @@ public class DocWriterApplication implements CommandLineRunner {
         JSONObject messageBody = new JSONObject();
         messageBody.put("messages", messagesArray);
 
-        messageBody.put("stop", new JSONArray(List.of("public class", "public interface"))); // stop it passed code start to be outputted
+        messageBody.put("stop", new JSONArray(List.of("public class", "public interface"))); // stop it passed code
+                                                                                             // start to be outputted
 
         return messageBody;
     }
