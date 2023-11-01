@@ -1,4 +1,4 @@
-package abax.docwriter.DocWriter;
+package abax.docwriter;
 
 import java.io.IOException;
 import java.net.URI;
@@ -69,7 +69,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DocWriterApplication implements CommandLineRunner {
 
-    @Value("${srcDir:}")
+    @Value("${srcDir:/data}")
     private String srcDir;
 
     @Value("${author:DocWriterApplication}")
@@ -118,7 +118,7 @@ public class DocWriterApplication implements CommandLineRunner {
         List<ParseResult<CompilationUnit>> parseResults = sourceRoot.tryToParse("");
 
         int changeCounter = maxFileToChange;
-        int toleratedErrors = 2;
+        int toleratedErrors = 5;
 
         // Analyze each parsed result
         for (ParseResult<CompilationUnit> parseResult : parseResults) {
