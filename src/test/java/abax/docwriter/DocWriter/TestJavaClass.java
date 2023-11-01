@@ -55,7 +55,7 @@ public class TestJavaClass implements CommandLineRunner {
     private boolean nonPublicMethodDoc;
 
     public static void main(String[] args) {
-        SpringApplication.run(DocWriterApplication.class, args);
+        SpringApplication.run(TestJavaClass.class, args);
     }
 
     @Override

@@ -49,15 +49,26 @@ public class DocWriterApplication implements CommandLineRunner {
 ```
 
 ## How to run this
-Since you are documenting a java application, a good understanding of running a java application is assumed. 
 
 Prerequisites:
-* pre unstalled java version 17 or newer
-* pre installed maven
 * openai Api Key, as the usage of API not for free. You may get welcome credits thou to document your codebase: https://platform.openai.com/docs/quickstart/step-2-setup-your-api-key
 
+
+## Docker
 ```bash
-export OPENAI_API_KEY==your-openapi-key
+
+docker run \
+-e OPENAI_API_KEY=your-openapi-key \
+-v ./src/test/java:/data \
+abaxsoraszem/docwriter:latest
+```
+This will produce class level documentation of the TestJavaClass.java file, which is part of this repo.
+
+## Java
+You may want to modify this for your own purposes. Since you are documenting a java application, a good understanding of running a java application is assumed. To run this application via Java
+
+```bash
+export OPENAI_API_KEY=your-openapi-key
 ./docWriter.sh --srcDir=./src/test/java 
 ```
 
