@@ -60,7 +60,7 @@ Prerequisites:
 docker run \
 -e OPENAI_API_KEY=your-openapi-key \
 -v ./src/test/java:/data \
-localhost:5001/docwriter:latest
+abaxsoraszem/docwriter:latest
 ```
 This will produce class level documentation of the TestJavaClass.java file, which is part of this repo.
 
