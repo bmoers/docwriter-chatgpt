@@ -87,5 +87,8 @@ Your code will be partially sent to OpenAI as part of the completion requests. P
 
 https://openai.com/enterprise-privacy
 
+## Blog Post
+If you are interested in the details of the solution, read this [blog post](https://www.csabameszaros.com/2023/10/29/ai-javadoc-writer/)
+
 
 
