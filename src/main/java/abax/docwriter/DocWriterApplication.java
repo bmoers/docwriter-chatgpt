@@ -22,6 +22,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import com.github.javaparser.ParseResult;
+import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.CompilationUnit.Storage;
 import com.github.javaparser.ast.Node;
@@ -41,7 +42,7 @@ import lombok.extern.slf4j.Slf4j;
  * CommandLineRunner interface.
  * It is responsible for analyzing Java source code and adding missing Javadoc
  * for classes and methods based on specified configurations.
- * 
+ *
  * This application accepts the following command line arguments:
  * - srcDir: The directory path to the source code. Default value is an empty
  * string.
@@ -55,14 +56,14 @@ import lombok.extern.slf4j.Slf4j;
  * methods. Default value is false.
  * - nonPublicMethodDoc: Flag to indicate whether to add Javadoc for non-public
  * methods. Default value is false.
- * 
+ *
  * The TestJavaClass application makes use of the OpenAI GPT-3.5 Turbo model to
  * generate Javadoc.
  * The access token for the API should be set as the OPENAI_API_KEY environment
  * variable.
- * 
+ *
  * To run the application, simply execute the main method.
- * 
+ *
  * @author DocWriterApplication
  */
 @SpringBootApplication
@@ -74,6 +75,9 @@ public class DocWriterApplication implements CommandLineRunner {
 
     @Value("${author:DocWriterApplication}")
     private String author;
+
+    @Value("${model:gpt-4o}")
+    private String model;
 
     @Value("${maxFileToChange:1}")
     private int maxFileToChange;
@@ -101,6 +105,7 @@ public class DocWriterApplication implements CommandLineRunner {
     }
 
     private void logArgs() {
+        log.info("model: " + model);
         log.info("srcDir: " + srcDir);
         log.info("maxFileToChange: " + maxFileToChange);
         log.debug("openApiToken: " + openaiApiKey);
@@ -182,6 +187,15 @@ public class DocWriterApplication implements CommandLineRunner {
         }
     }
 
+    private String getIndentation(MethodDeclaration method) {
+        // Get the starting position of the method
+        Position position = method.getBegin().orElse(new Position(0, 0));
+        int column = position.column;
+
+        // Create a string with the correct number of spaces
+        return " ".repeat(Math.max(0, column - 2));
+    }
+
     private void addMethodJavadoc(CompilationUnit cu, MethodDeclaration method, String className) throws Exception {
         log.info("Adding missing JavaDoc for method: {}.{}", className, method.getNameAsString());
 
@@ -191,15 +205,37 @@ public class DocWriterApplication implements CommandLineRunner {
             log.error("Failed to generate javadoc for {}", method.getNameAsString());
             return;
         }
-        Javadoc javadoc = new Javadoc(JavadocDescription.parseText(generatedJavadoc));
-        JavadocComment javadocComment = new JavadocComment(javadoc.toText());
+
+        // Get the indentation of the method
+        String methodIndentation = getIndentation(method);
+
+        // Process the generated Javadoc to add correct indentation
+        String[] javadocLines = generatedJavadoc.split("\n");
+        StringBuilder indentedJavadoc = new StringBuilder();
+
+        for (int i = 0; i < javadocLines.length; i++) {
+            if (i == 0) {
+                // First line should be at the same indentation as the method
+                indentedJavadoc.append(methodIndentation).append(javadocLines[i]).append("\n");
+            } else if (i == javadocLines.length - 1) {
+                // Last line (closing */) should be at the same indentation as the method
+                indentedJavadoc.append(methodIndentation).append(javadocLines[i]);
+            } else {
+                // Inner lines should have an extra space
+                indentedJavadoc.append(methodIndentation).append(" ").append(javadocLines[i]).append("\n");
+            }
+        }
+
+        Javadoc javadoc = new Javadoc(JavadocDescription.parseText(indentedJavadoc.toString()));
+
+        JavadocComment javadocComment = new JavadocComment(javadoc.toText().stripTrailing()  + "\n  " + methodIndentation);
         method.setJavadocComment(javadocComment);
 
     }
 
     private void addClassJavadoc(CompilationUnit cu, ClassOrInterfaceDeclaration classOrInterface) throws Exception {
 
-        log.info("Adding missing JavaDoc for class/interface: {}",  classOrInterface.getNameAsString());
+        log.info("Adding missing JavaDoc for class/interface: {}", classOrInterface.getNameAsString());
 
         String sourceCode = "";
         for (Node child : cu.getChildNodes()) {
@@ -236,21 +272,21 @@ public class DocWriterApplication implements CommandLineRunner {
     }
 
     private String generateJavaDoc(String classSourceCode, JSONObject messageBody) throws Exception {
-        log.trace("generating javadoc for \n {}",  classSourceCode);
+        log.trace("generating javadoc for \n {}", classSourceCode);
 
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
         userMessage.put("content", classSourceCode);
         messageBody.getJSONArray("messages").put(userMessage);
 
-        messageBody.put("model", "gpt-3.5-turbo");
-        messageBody.put("temperature", 1);
+        messageBody.put("model", model);
+        messageBody.put("temperature", 0.7);
         messageBody.put("max_tokens", 256);
         messageBody.put("top_p", 1);
         messageBody.put("frequency_penalty", 0);
         messageBody.put("presence_penalty", 0);
 
-        log.info("Sending ChatGpt request ");
+        log.debug("Sending ChatGpt request {}", messageBody);
 
         // Create HTTP request
         HttpRequest request = HttpRequest.newBuilder()
@@ -263,22 +299,28 @@ public class DocWriterApplication implements CommandLineRunner {
 
         // get the conn, and handle the case when OpenAI API is not reachable
         HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-        // HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        // HttpResponse<String> response = client.send(request,
+        // HttpResponse.BodyHandlers.ofString());
         HttpResponse<String> response = sendWithRetry(client, request, 2);
 
-        log.debug("Received response {}", response.body());
+        var responseBody = response.body();
+
+        log.debug("ChatGpt request {}", responseBody);
 
         // Process the response
-        JSONObject jsonResponse = new JSONObject(response.body());
+        JSONObject jsonResponse = new JSONObject(responseBody);
         if (jsonResponse.has("error")) {
             throw new RuntimeException(jsonResponse.getJSONObject("error").toString());
 
         }
-        String content = jsonResponse.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
-                .getString("content");
-        log.info("ChatGpt response received: ");
+        String content = jsonResponse.getJSONArray("choices")
+            .getJSONObject(0).getJSONObject("message")
+            .getString("content");
+
+        log.debug("ChatGpt response received: \n{}", content);
+
         String classJavaDoc = extractJavadoc(content);
-        log.info(classJavaDoc);
+        log.debug("Converted JavaDoc: \n{}", classJavaDoc);
 
         return classJavaDoc;
 
@@ -295,7 +337,7 @@ public class DocWriterApplication implements CommandLineRunner {
                 return client.send(request, HttpResponse.BodyHandlers.ofString());
             } catch (HttpTimeoutException e) {
                 if (++attempt == maxAttempts)
-                    throw e; 
+                    throw e;
                 else {
                     log.warn("Request timeouted. Will retry");
                 }
@@ -309,8 +351,22 @@ public class DocWriterApplication implements CommandLineRunner {
 
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
+        /*
         systemMessage.put("content",
-                "You will be provided with java source code. Your task is to generate javadoc for this java method. \nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the method starting with the \n/**\nand ending with the\n/*\n");
+                "You will be provided with java source code. Your task is to generate javadoc for this java method. \nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the method starting with the \n/**\nand ending with the\n/*\nEnsure @param and @return tags are included where necessary and come at the end of the Javadoc.\nEnsure there is no new line at the end of the Javadoc.\n");
+        */
+        systemMessage.put("content",
+            "You are an expert Java developer tasked with generating high-quality JavaDoc for Java classes and interfaces. You will be provided with java source code. Your task is to generate javadoc for this java method. Follow these guidelines:\n\n"+
+            "1. Provide a concise, clear description of the class/interface purpose and behavior.\n"+
+            "2. The javadoc must be generated for the method level.\n"+
+            "3. Use present tense, starting with a verb (e.g., 'Manages...', 'Provides...').\n"+
+            "4. Mention key functionalities, but avoid implementation details.\n"+
+            "5. Ensure @param and @return tags are included where necessary and come at the end of the Javadoc.\n"+
+            "6. Note any usage constraints or important considerations.\n"+
+            "7. Don't generate code comments.\n"+
+            "8. Don't repeat the source code in your response.\n\n"+
+            "Respond only with the JavaDoc comment, starting with /** and ending with */.");
+
         messagesArray.put(systemMessage);
 
         JSONObject messageBody = new JSONObject();
@@ -324,11 +380,27 @@ public class DocWriterApplication implements CommandLineRunner {
 
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
+        /*
         systemMessage.put("content",
                 "You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. The javadoc must be generated for the class or interface level, and not on the method level. \\n"
                         + //
                         "Do not generate code comments.\\n" + //
-                        "Do not print out the source code, that has been provided as input.");
+                        "Do not print out the source code, that has been provided as input.\\n" + //
+                        "Ensure there is no new line at the end of the Javadoc.");
+        */
+        systemMessage.put("content",
+            "You are an expert Java developer tasked with generating high-quality JavaDoc for Java classes and interfaces. You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. Follow these guidelines:\n\n"+
+            "1. Provide a concise, clear description of the class/interface purpose and behavior.\n"+
+            "2. The javadoc must be generated for the class or interface level, and not on the method level.\n"+
+            "3. Use present tense, starting with a verb (e.g., 'Manages...', 'Provides...').\n"+
+            "4. Mention key functionalities, but avoid implementation details.\n"+
+            "5. If the class extends or implements others, mention this with @see tags.\n"+
+            "6. Note any usage constraints or important considerations.\n"+
+            "7. For interfaces, describe the contract it defines.\n"+
+            "8. Don't generate method-level JavaDoc or code comments.\n"+
+            "9. Don't repeat the source code in your response.\n\n"+
+            "Respond only with the JavaDoc comment, starting with /** and ending with */.");
+
         messagesArray.put(systemMessage);
 
         JSONObject sampleUserMessage = new JSONObject();
@@ -354,10 +426,10 @@ public class DocWriterApplication implements CommandLineRunner {
 
     private String extractJavadoc(String input) {
         int startIndex = input.indexOf("/**");
-        int endIndex = input.indexOf("*/");
+        int endIndex = input.lastIndexOf("*/");
 
         if (startIndex != -1 && endIndex != -1) {
-            return input.substring(startIndex + 3, endIndex);
+            return input.substring(startIndex + 3, endIndex).replace("*/", "*&#47;");
         } else {
             return null;
         }
