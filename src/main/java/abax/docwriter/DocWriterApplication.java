@@ -12,10 +12,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -35,6 +38,8 @@ import com.github.javaparser.javadoc.description.JavadocDescription;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.github.javaparser.utils.SourceRoot;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -93,13 +98,23 @@ public class DocWriterApplication implements CommandLineRunner {
     @Value("${nonPublicMethodDoc:false}")
     private boolean nonPublicMethodDoc;
 
+    @Value("${logLevel:INFO}")
+    private String logLevel;
+
+    private Map<String, List<String>> fileContentCache = new ConcurrentHashMap<>();
+
     public static void main(String[] args) {
         SpringApplication.run(DocWriterApplication.class, args);
     }
 
     @Override
     public void run(String... args) throws Exception {
+
+        ((Logger) LoggerFactory.getLogger("abax.docwriter"))
+                .setLevel(Level.valueOf(logLevel.toUpperCase()));
+
         logArgs();
+
         addDocs();
 
     }
@@ -132,6 +147,9 @@ public class DocWriterApplication implements CommandLineRunner {
                 // this will try to preserve the format
                 LexicalPreservingPrinter.setup(cu);
                 boolean fileChanged = false;
+
+                // clear the cache
+                fileContentCache = new ConcurrentHashMap<>();
 
                 log.info("Processing {}", cu.getStorage().get().getPath());
                 try {
@@ -187,13 +205,46 @@ public class DocWriterApplication implements CommandLineRunner {
         }
     }
 
-    private String getIndentation(MethodDeclaration method) {
+    private String getIndentation(CompilationUnit cu, MethodDeclaration method) {
         // Get the starting position of the method
         Position position = method.getBegin().orElse(new Position(0, 0));
-        int column = position.column;
+        int lineNumber = position.line;
 
-        // Create a string with the correct number of spaces
-        return " ".repeat(Math.max(0, column - 2));
+        // Get the content of the line where the method starts
+        String lineContent = getLineContent(cu, lineNumber);
+
+        // Count the leading whitespace characters
+        int leadingWhitespace = 0;
+        for (char c : lineContent.toCharArray()) {
+            if (c == ' ') {
+                leadingWhitespace++;
+            } else if (c == '\t') {
+                // Assume tab width is 4 spaces
+                leadingWhitespace += 4;
+            } else {
+                break;
+            }
+        }
+
+        // Create a string with the correct indentation
+        return " ".repeat(leadingWhitespace - 1);
+    }
+
+    private String getLineContent(CompilationUnit cu, int lineNumber) {
+        return cu.getStorage()
+                .map(storage -> {
+                    String path = storage.getPath().toString();
+                    List<String> lines = fileContentCache.computeIfAbsent(path, k -> {
+                        try {
+                            return Files.readAllLines(storage.getPath());
+                        } catch (IOException e) {
+                            log.error("Error reading file: " + e.getMessage());
+                            return List.of();
+                        }
+                    });
+                    return lineNumber > 0 && lineNumber <= lines.size() ? lines.get(lineNumber - 1) : "";
+                })
+                .orElse("");
     }
 
     private void addMethodJavadoc(CompilationUnit cu, MethodDeclaration method, String className) throws Exception {
@@ -207,7 +258,7 @@ public class DocWriterApplication implements CommandLineRunner {
         }
 
         // Get the indentation of the method
-        String methodIndentation = getIndentation(method);
+        String methodIndentation = getIndentation(cu, method);
 
         // Process the generated Javadoc to add correct indentation
         String[] javadocLines = generatedJavadoc.split("\n");
@@ -228,7 +279,8 @@ public class DocWriterApplication implements CommandLineRunner {
 
         Javadoc javadoc = new Javadoc(JavadocDescription.parseText(indentedJavadoc.toString()));
 
-        JavadocComment javadocComment = new JavadocComment(javadoc.toText().stripTrailing()  + "\n  " + methodIndentation);
+        JavadocComment javadocComment = new JavadocComment(
+                javadoc.toText().stripTrailing() + "\n  " + methodIndentation);
         method.setJavadocComment(javadocComment);
 
     }
@@ -314,8 +366,8 @@ public class DocWriterApplication implements CommandLineRunner {
 
         }
         String content = jsonResponse.getJSONArray("choices")
-            .getJSONObject(0).getJSONObject("message")
-            .getString("content");
+                .getJSONObject(0).getJSONObject("message")
+                .getString("content");
 
         log.debug("ChatGpt response received: \n{}", content);
 
@@ -352,20 +404,23 @@ public class DocWriterApplication implements CommandLineRunner {
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
         /*
+         * systemMessage.put("content",
+         * "You will be provided with java source code. Your task is to generate javadoc for this java method. \nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the method starting with the \n/**\nand ending with the\n/*\nEnsure @param and @return tags are included where necessary and come at the end of the Javadoc.\nEnsure there is no new line at the end of the Javadoc.\n"
+         * );
+         */
         systemMessage.put("content",
-                "You will be provided with java source code. Your task is to generate javadoc for this java method. \nDo not generate code comments.\nDo not print out the source code, that has been provided as input, merely the Javadoc for the method starting with the \n/**\nand ending with the\n/*\nEnsure @param and @return tags are included where necessary and come at the end of the Javadoc.\nEnsure there is no new line at the end of the Javadoc.\n");
-        */
-        systemMessage.put("content",
-            "You are an expert Java developer tasked with generating high-quality JavaDoc for Java classes and interfaces. You will be provided with java source code. Your task is to generate javadoc for this java method. Follow these guidelines:\n\n"+
-            "1. Provide a concise, clear description of the class/interface purpose and behavior.\n"+
-            "2. The javadoc must be generated for the method level.\n"+
-            "3. Use present tense, starting with a verb (e.g., 'Manages...', 'Provides...').\n"+
-            "4. Mention key functionalities, but avoid implementation details.\n"+
-            "5. Ensure @param and @return tags are included where necessary and come at the end of the Javadoc.\n"+
-            "6. Note any usage constraints or important considerations.\n"+
-            "7. Don't generate code comments.\n"+
-            "8. Don't repeat the source code in your response.\n\n"+
-            "Respond only with the JavaDoc comment, starting with /** and ending with */.");
+                "You are an expert Java developer tasked with generating high-quality JavaDoc for Java classes and interfaces. You will be provided with java source code. Your task is to generate javadoc for this java method. Follow these guidelines:\n\n"
+                        +
+                        "1. Provide a concise, clear description of the class/interface purpose and behavior.\n" +
+                        "2. The javadoc must be generated for the method level.\n" +
+                        "3. Use present tense, starting with a verb (e.g., 'Manages...', 'Provides...').\n" +
+                        "4. Mention key functionalities, but avoid implementation details.\n" +
+                        "5. Ensure @param and @return tags are included where necessary and come at the end of the Javadoc.\n"
+                        +
+                        "6. Note any usage constraints or important considerations.\n" +
+                        "7. Don't generate code comments.\n" +
+                        "8. Don't repeat the source code in your response.\n\n" +
+                        "Respond only with the JavaDoc comment, starting with /** and ending with */.");
 
         messagesArray.put(systemMessage);
 
@@ -381,25 +436,27 @@ public class DocWriterApplication implements CommandLineRunner {
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
         /*
+         * systemMessage.put("content",
+         * "You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. The javadoc must be generated for the class or interface level, and not on the method level. \\n"
+         * + //
+         * "Do not generate code comments.\\n" + //
+         * "Do not print out the source code, that has been provided as input.\\n" + //
+         * "Ensure there is no new line at the end of the Javadoc.");
+         */
         systemMessage.put("content",
-                "You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. The javadoc must be generated for the class or interface level, and not on the method level. \\n"
-                        + //
-                        "Do not generate code comments.\\n" + //
-                        "Do not print out the source code, that has been provided as input.\\n" + //
-                        "Ensure there is no new line at the end of the Javadoc.");
-        */
-        systemMessage.put("content",
-            "You are an expert Java developer tasked with generating high-quality JavaDoc for Java classes and interfaces. You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. Follow these guidelines:\n\n"+
-            "1. Provide a concise, clear description of the class/interface purpose and behavior.\n"+
-            "2. The javadoc must be generated for the class or interface level, and not on the method level.\n"+
-            "3. Use present tense, starting with a verb (e.g., 'Manages...', 'Provides...').\n"+
-            "4. Mention key functionalities, but avoid implementation details.\n"+
-            "5. If the class extends or implements others, mention this with @see tags.\n"+
-            "6. Note any usage constraints or important considerations.\n"+
-            "7. For interfaces, describe the contract it defines.\n"+
-            "8. Don't generate method-level JavaDoc or code comments.\n"+
-            "9. Don't repeat the source code in your response.\n\n"+
-            "Respond only with the JavaDoc comment, starting with /** and ending with */.");
+                "You are an expert Java developer tasked with generating high-quality JavaDoc for Java classes and interfaces. You will be provided with the source code of a java class or java interface. Your task is to generate javadoc for this class or interface. Follow these guidelines:\n\n"
+                        +
+                        "1. Provide a concise, clear description of the class/interface purpose and behavior.\n" +
+                        "2. The javadoc must be generated for the class or interface level, and not on the method level.\n"
+                        +
+                        "3. Use present tense, starting with a verb (e.g., 'Manages...', 'Provides...').\n" +
+                        "4. Mention key functionalities, but avoid implementation details.\n" +
+                        "5. If the class extends or implements others, mention this with @see tags.\n" +
+                        "6. Note any usage constraints or important considerations.\n" +
+                        "7. For interfaces, describe the contract it defines.\n" +
+                        "8. Don't generate method-level JavaDoc or code comments.\n" +
+                        "9. Don't repeat the source code in your response.\n\n" +
+                        "Respond only with the JavaDoc comment, starting with /** and ending with */.");
 
         messagesArray.put(systemMessage);
 
